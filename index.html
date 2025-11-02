@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Result Portal</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:"Times New Roman",serif;
+      background:#f5f7fb;
+      color:#222;
+    }
+    header{
+      background:#0e3a75;
+      color:white;
+      text-align:center;
+      padding:1rem;
+      border-bottom:4px solid #c8d3e8;
+    }
+    header h1{margin:0;font-size:1.8rem;letter-spacing:0.5px;}
+    header p{margin:4px 0 0;font-size:0.9rem;opacity:0.9;}
+
+    .container{
+      max-width:900px;
+      margin:20px auto;
+      background:white;
+      border:1px solid #ccc;
+      border-radius:6px;
+      padding:20px;
+      box-shadow:0 2px 10px rgba(0,0,0,0.05);
+    }
+    h2{
+      text-align:center;
+      color:#0e3a75;
+      margin-bottom:20px;
+      border-bottom:2px solid #0e3a75;
+      padding-bottom:5px;
+    }
+
+    label{
+      font-weight:600;
+      font-size:14px;
+      color:#333;
+      display:block;
+      margin-bottom:6px;
+    }
+    select{
+      padding:10px 12px;
+      font-size:14px;
+      border:1.5px solid #ccc;
+      border-radius:5px;
+      outline:none;
+      width:100%;
+      background:#fff;
+    }
+    select:focus{border-color:#0e3a75}
+    .filters{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:12px;
+      margin-top:10px;
+    }
+
+    .message{margin:15px 0;padding:12px;border-radius:8px;text-align:center;}
+    .message.info{background:#eef2ff;color:#334}
+    .message.error{background:#ffeaea;color:#a00}
+
+    .summary-table, .marks-table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:1rem;
+    }
+    th, td{
+      border:1px solid #ccc;
+      padding:10px;
+      text-align:center;
+      transition:background 0.3s;
+    }
+    th{
+      background:#0e3a75;
+      color:white;
+    }
+    td:hover{
+      background:#eaf0ff;
+    }
+
+    .btn-download{
+      display:inline-block;
+      background:#0e3a75;
+      color:white;
+      padding:10px 18px;
+      border:none;
+      border-radius:5px;
+      cursor:pointer;
+      font-weight:600;
+      margin-top:15px;
+      transition:0.2s;
+    }
+    .btn-download:hover{background:#072b59}
+
+    .no-result{text-align:center;padding:30px;color:#888;}
+
+    footer{
+      background:#0e3a75;
+      color:white;
+      text-align:center;
+      padding:10px;
+      margin-top:40px;
+      font-size:0.9rem;
+    }
+    footer strong{color:#ffd700}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Student Result Portal</h1>
+    <p>Academic Performance Information</p>
+  </header>
+
+  <div class="container">
+    <h2>📘 Result Finder</h2>
+
+    <div class="filters">
+      <div>
+        <label for="testSelect">Test Type</label>
+        <select id="testSelect"><option value="">Select Test Type</option></select>
+      </div>
+      <div>
+        <label for="classSelect">Class</label>
+        <select id="classSelect"><option value="">Select Class</option></select>
+      </div>
+      <div>
+        <label for="divSelect">Division</label>
+        <select id="divSelect"><option value="">Select Division</option></select>
+      </div>
+      <div>
+        <label for="rollSelect">Roll No</label>
+        <select id="rollSelect"><option value="">Select Roll No</option></select>
+      </div>
+    </div>
+
+    <div id="msg" class="message info" style="display:none"></div>
+    <div id="result"></div>
+  </div>
+
+  <footer>
+    <p>© 2025 Student Result Portal | Designed by <strong>Ojas</strong></p>
+  </footer>
+
+  <script>
+  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNvyBybgY5aWJ6xMvMFunzdRZg14aupn6eLOhsmNMdm1vehWPkCJWwtwVYLSmjVEKowEPKiVFMijUk/pub?gid=2122310706&single=true&output=csv";
+
+  let allData = [];
+  let headers = {};
+
+  function showMsg(text, type='info') {
+    const msg = document.getElementById('msg');
+    msg.textContent = text;
+    msg.className = `message ${type}`;
+    msg.style.display = 'block';
+  }
+  function hideMsg() {
+    document.getElementById('msg').style.display = 'none';
+  }
+
+  function parseCSV(text) {
+    const result = Papa.parse(text.trim(), {header: true, skipEmptyLines: true});
+    if (result.errors.length) {
+      showMsg('Error parsing CSV: ' + result.errors[0].message, 'error');
+      return [];
+    }
+    return result.data;
+  }
+
+  function normalizeHeaders(row) {
+    const keys = Object.keys(row);
+    headers = {
+      test: keys.find(k => /test/i.test(k)) || '',
+      class: keys.find(k => /^class$/i.test(k)) || keys.find(k => /class/i.test(k)) || '',
+      div: keys.find(k => /div/i.test(k)) || '',
+      roll: keys.find(k => /roll/i.test(k)) || '',
+    };
+  }
+
+  function populateDropdown(id, values) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = `<option value="">Select ${sel.previousElementSibling.textContent}</option>`;
+    values.sort().forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      sel.appendChild(o);
+    });
+  }
+
+  function populateFilters() {
+    const testTypes = [...new Set(allData.map(r => r[headers.test]).filter(Boolean))];
+    const classes = [...new Set(allData.map(r => r[headers.class]).filter(Boolean))];
+    populateDropdown('testSelect', testTypes);
+    populateDropdown('classSelect', classes);
+    document.getElementById('divSelect').innerHTML = '<option value="">Select Division</option>';
+    document.getElementById('rollSelect').innerHTML = '<option value="">Select Roll No</option>';
+  }
+
+  function updateDivisions() {
+    const test = document.getElementById('testSelect').value;
+    const cls = document.getElementById('classSelect').value;
+    if (!test || !cls) return;
+
+    const divs = [...new Set(allData
+      .filter(r => r[headers.test] === test && r[headers.class] === cls)
+      .map(r => r[headers.div])
+      .filter(Boolean)
+    )];
+    populateDropdown('divSelect', divs);
+    document.getElementById('rollSelect').innerHTML = '<option value="">Select Roll No</option>';
+  }
+
+  function updateRolls() {
+    const test = document.getElementById('testSelect').value;
+    const cls = document.getElementById('classSelect').value;
+    const div = document.getElementById('divSelect').value;
+    if (!test || !cls || !div) return;
+
+    const rolls = [...new Set(allData
+      .filter(r => r[headers.test] === test && r[headers.class] === cls && r[headers.div] === div)
+      .map(r => r[headers.roll])
+      .filter(Boolean)
+    )];
+    populateDropdown('rollSelect', rolls);
+  }
+
+  function showResult() {
+    const test = document.getElementById('testSelect').value;
+    const cls = document.getElementById('classSelect').value;
+    const div = document.getElementById('divSelect').value;
+    const roll = document.getElementById('rollSelect').value;
+    const resDiv = document.getElementById('result');
+
+    if (!test || !cls || !div || !roll) {
+      resDiv.innerHTML = '<div class="no-result">Select all fields to see your result.</div>';
+      return;
+    }
+
+    const student = allData.find(r =>
+      r[headers.test] === test &&
+      r[headers.class] === cls &&
+      r[headers.div] === div &&
+      r[headers.roll] === roll
+    );
+
+    if (!student) {
+      resDiv.innerHTML = '<div class="no-result">No record found for this combination.</div>';
+      return;
+    }
+
+    // Header info (upper table)
+    const topKeys = ["SR", "ROLL", "TEST TYPE", "CLASS", "DIV", "NAME"];
+    const topRow = topKeys.map(k => `<th>${k}</th>`).join('');
+    const topVals = topKeys.map(k => `<td>${student[k] || student[k.toLowerCase()] || '-'}</td>`).join('');
+
+    // Subject marks (lower table)
+    const subjectKeys = Object.keys(student).filter(k => !topKeys.includes(k.toUpperCase()));
+    const subjectRows = subjectKeys.map(k => `<tr><th>${k}</th><td>${student[k]}</td></tr>`).join('');
+
+    resDiv.innerHTML = `
+      <table class="summary-table">
+        <tr>${topRow}</tr>
+        <tr>${topVals}</tr>
+      </table>
+      <table class="marks-table">
+        <thead><tr><th>Subject</th><th>Marks</th></tr></thead>
+        <tbody>${subjectRows}</tbody>
+      </table>
+      <button class="btn-download" onclick="downloadResult(${JSON.stringify(JSON.stringify(student))})">
+        ⬇ Download Result
+      </button>
+    `;
+  }
+
+  function downloadResult(dataStr) {
+    const data = JSON.parse(dataStr);
+    const csv = Papa.unparse([data]);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${data.Roll || data.roll || 'result'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function loadCSV() {
+    showMsg('Loading student data...');
+    fetch(CSV_URL)
+      .then(r => r.text())
+      .then(text => {
+        allData = parseCSV(text);
+        if (!allData.length) return;
+        normalizeHeaders(allData[0]);
+        populateFilters();
+        hideMsg();
+        showResult();
+      })
+      .catch(e => showMsg('Error loading CSV: ' + e.message, 'error'));
+  }
+
+  window.onload = loadCSV;
+
+  document.getElementById('testSelect').onchange = () => { updateDivisions(); showResult(); };
+  document.getElementById('classSelect').onchange = () => { updateDivisions(); showResult(); };
+  document.getElementById('divSelect').onchange = () => { updateRolls(); showResult(); };
+  document.getElementById('rollSelect').onchange = () => { showResult(); };
+  </script>
+</body>
+</html>
